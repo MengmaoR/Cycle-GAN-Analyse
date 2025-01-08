@@ -18,23 +18,23 @@ from datasets import ImageDataset
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epoch', type=int, default=0, help='starting epoch')
+    parser.add_argument('--epoch', type=int, default=100, help='starting epoch')
     parser.add_argument('--n_epochs', type=int, default=200, help='number of epochs of training')
+    parser.add_argument('--decay_epoch', type=int, default=100, help='epoch to start linearly decaying the learning rate to 0')
     parser.add_argument('--batchSize', type=int, default=1, help='size of the batches')
     parser.add_argument('--dataroot', type=str, default='datasets/monet2photo/', help='root directory of the dataset')
     parser.add_argument('--lr', type=float, default=0.0002, help='initial learning rate')
-    parser.add_argument('--decay_epoch', type=int, default=100, help='epoch to start linearly decaying the learning rate to 0')
     parser.add_argument('--size', type=int, default=256, help='size of the data crop (squared assumed)')
     parser.add_argument('--input_nc', type=int, default=3, help='number of channels of input data')
     parser.add_argument('--output_nc', type=int, default=3, help='number of channels of output data')
     parser.add_argument('--n_cpu', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--use_pretrained', action='store_true', help='use pretrained model')
-    parser.add_argument('--pretrained_model', type=str, default='checkpoints/', help='pretrained model path')
+    parser.add_argument('--style', type=str, default='monet', help='style name')
     opt = parser.parse_args()
     print(opt)
 
+    model_path = f"checkpoints/monet2photo_pretrained"
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    torch.device(device)
 
     ###### Definition of variables ######
     # Networks
@@ -50,13 +50,21 @@ def main():
         netD_A.apply(weights_init_normal)
         netD_B.apply(weights_init_normal)
     else:
+        print(f"Using pretrained model, loading from {model_path}")
         # 使用预训练模型进行二次训练
-        # 注意，这里假定预训练模型使用的网络结构和本脚本定义的一致
-        # 加载对应的 .pth 文件
-        netG_A2B.load_state_dict(torch.load(os.path.join(opt.pretrained_model, 'netG_A2B.pth'), map_location=device))
-        netG_B2A.load_state_dict(torch.load(os.path.join(opt.pretrained_model, 'netG_B2A.pth'), map_location=device))
-        netD_A.load_state_dict(torch.load(os.path.join(opt.pretrained_model, 'netD_A.pth'), map_location=device))
-        netD_B.load_state_dict(torch.load(os.path.join(opt.pretrained_model, 'netD_B.pth'), map_location=device))
+        try:
+            ga = torch.load(f'{model_path}/netG_A.pth', map_location=device)
+            da = torch.load(f'{model_path}/netD_A.pth', map_location=device)
+            gb = torch.load(f'{model_path}/netG_B.pth', map_location=device)
+            db = torch.load(f'{model_path}/netD_B.pth', map_location=device)
+
+            netG_A2B.load_state_dict(ga)
+            netG_B2A.load_state_dict(gb)
+            netD_A.load_state_dict(da)
+            netD_B.load_state_dict(db)
+            print(f"Pretrained Model loaded successfully")
+        except Exception as e:
+            print(f"Error loading model: {e}")
 
     # Lossess
     criterion_GAN = torch.nn.MSELoss()
@@ -103,6 +111,13 @@ def main():
             real_A = Variable(input_A.copy_(batch['A']))
             real_B = Variable(input_B.copy_(batch['B']))
 
+            # real_A_img = (real_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            # real_A_img = Image.fromarray(real_A_img.astype('uint8'))
+            # real_A_img.save(f'output/real_A_epoch{epoch}_batch{i}.png')
+            # real_B_img = (real_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            # real_B_img = Image.fromarray(real_B_img.astype('uint8'))
+            # real_B_img.save(f'output/real_B_epoch{epoch}_batch{i}.png')
+
             ###### Generators A2B and B2A ######
             optimizer_G.zero_grad()
 
@@ -110,18 +125,36 @@ def main():
             # G_A2B(B) should equal B if real B is fed
             same_B = netG_A2B(real_B)
             loss_identity_B = criterion_identity(same_B, real_B)*5.0
+            # same_B_img = (same_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            # same_B_img = Image.fromarray(same_B_img.astype('uint8'))
+            # same_B_img.save(f'output/same_B_epoch{epoch}_batch{i}.png')
             # G_B2A(A) should equal A if real A is fed
+
             same_A = netG_B2A(real_A)
             loss_identity_A = criterion_identity(same_A, real_A)*5.0
+            # same_A_img = (same_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            # same_A_img = Image.fromarray(same_A_img.astype('uint8'))
+            # same_A_img.save(f'output/same_A_epoch{epoch}_batch{i}.png')
 
             # GAN loss
             fake_B = netG_A2B(real_A)
-            pred_fake = netD_B(fake_B)
             loss_GAN_A2B = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
+            pred_fake = netD_B(fake_B)
+
+            if i % 100 < 4:
+                fake_B_img = (fake_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+                fake_B_img = Image.fromarray(fake_B_img.astype('uint8'))
+                fake_B_img.save(f'output/fake_B_epoch{epoch}_batch{i}.png')
+            
 
             fake_A = netG_B2A(real_B)
-            pred_fake = netD_A(fake_A)
             loss_GAN_B2A = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
+            pred_fake = netD_A(fake_A)
+            
+            if i % 100 < 4:
+                fake_A_img = (fake_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+                fake_A_img = Image.fromarray(fake_A_img.astype('uint8'))
+                fake_A_img.save(f'output/fake_A_epoch{epoch}_batch{i}.png')
 
             # Cycle loss
             recovered_A = netG_B2A(fake_B)

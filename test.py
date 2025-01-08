@@ -11,65 +11,85 @@ import torch
 from models import Generator
 from datasets import ImageDataset
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--batchSize', type=int, default=1, help='size of the batches')
-parser.add_argument('--dataroot', type=str, default='datasets/monet2photo/', help='root directory of the dataset')
-parser.add_argument('--input_nc', type=int, default=3, help='number of channels of input data')
-parser.add_argument('--output_nc', type=int, default=3, help='number of channels of output data')
-parser.add_argument('--size', type=int, default=256, help='size of the data (squared assumed)')
-parser.add_argument('--cuda', action='store_true', help='use GPU computation')
-parser.add_argument('--n_cpu', type=int, default=8, help='number of cpu threads to use during batch generation')
-parser.add_argument('--model', type=str, default='checkpoints/style_monet.pth', help='model checkpoint file')
-opt = parser.parse_args()
-print(opt)
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--batchSize', type=int, default=1, help='size of the batches')
+    parser.add_argument('--dataroot', type=str, default='datasets/monet2photo/', help='root directory of the dataset')
+    parser.add_argument('--input_nc', type=int, default=3, help='number of channels of input data')
+    parser.add_argument('--output_nc', type=int, default=3, help='number of channels of output data')
+    parser.add_argument('--size', type=int, default=256, help='size of the data (squared assumed)')
+    parser.add_argument('--cuda', action='store_true', help='use GPU computation')
+    parser.add_argument('--n_cpu', type=int, default=8, help='number of cpu threads to use during batch generation')
+    parser.add_argument('--model', type=str, default='style_monet', help='model checkpoint file')
+    opt = parser.parse_args()
+    print(opt)
 
-device = 'cuda' if torch.cuda.is_available() else 'cpu'
-torch.device(device)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    torch.device(device)
 
-###### Definition of variables ######
-# Networks
-netG = Generator(opt.input_nc, opt.output_nc)
+    model_path = f"checkpoints/{opt.model}.pth"
 
-# if opt.cuda:
-#     netG_A2B.cuda()
-#     netG_B2A.cuda()
+    # 尝试加载模型
+    try:
+        model = torch.load(model_path, map_location=device)
+        netG = Generator(opt.input_nc, opt.output_nc)
+        netG.load_state_dict(model)
+        print(f"Model loaded successfully")
+    except Exception as e:
+        print(f"Error loading model: {e}")
 
-# Load state dicts
-netG.load_state_dict(torch.load("checkpoints/style_monet.pth"), map_location=device)
+    with open('model.txt', 'w') as f:
+        for name, param in netG.named_parameters():
+            f.write(f"{name}: {param.size()}\n")
 
-# Set model's test mode
-netG.eval()
+    ###### Definition of variables ######
+    # Networks
+    # netG = Generator(opt.input_nc, opt.output_nc)
 
-# Inputs & targets memory allocation
-Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
-input = Tensor(opt.batchSize, opt.input_nc, opt.size, opt.size)
+    # # if opt.cuda:
+    # #     netG_A2B.cuda()
+    # #     netG_B2A.cuda()
 
-# Dataset loader
-transforms_ = [ transforms.ToTensor(),
-                transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) ]
-dataloader = DataLoader(ImageDataset(opt.dataroot, transforms_=transforms_, mode='test'), 
-                        batch_size=opt.batchSize, shuffle=False, num_workers=opt.n_cpu)
-###################################
+    # # Load state dicts
+    # netG.load_state_dict(torch.load("checkpoints/style_monet.pth")['netG'], map_location=device)
 
-###### Testing######
+    # Set model's test mode
+    netG.eval()
 
-# Create output dirs if they don't exist
-model_name = "style_monet"
+    # Inputs & targets memory allocation
+    Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
+    input = Tensor(opt.batchSize, opt.input_nc, opt.size, opt.size)
 
-if not os.path.exists('checkpoints/' + model_name):
-    os.makedirs('checkpoints/' + model_name)
+    # Dataset loader
+    transforms_ = [ transforms.ToTensor(),
+                    transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) ]
+    dataloader = DataLoader(ImageDataset(opt.dataroot, transforms_=transforms_, mode='test'), 
+                            batch_size=opt.batchSize, shuffle=False, num_workers=opt.n_cpu)
+    ###################################
 
-for i, batch in enumerate(dataloader):
-    # Set model input
-    real = Variable(input.copy_(batch['A']))
+    ###### Testing######
 
-    # Generate output
-    fake = 0.5*(netG(real).data + 1.0)
+    # Create output dirs if they don't exist
+    model_name = "style_monet"
+    save_path = f"results/{model_name}"
 
-    # Save image files
-    save_image(fake, 'result/%04d.png' % (i+1))
+    if not os.path.exists('results/' + model_name):
+        os.makedirs('results/' + model_name)
 
-    sys.stdout.write('\rGenerated images %04d of %04d' % (i+1, len(dataloader)))
+    for i, batch in enumerate(dataloader):
+        # Set model input
+        real = Variable(input.copy_(batch['B']))
 
-sys.stdout.write('\n')
-###################################
+        # Generate output
+        fake = 0.5*(netG(real).data + 1.0)
+
+        # Save image files
+        save_image(fake, f'{save_path}/%04d.png' % (i+1))
+
+        sys.stdout.write('\rGenerated images %04d of %04d' % (i+1, len(dataloader)))
+
+    sys.stdout.write('\n')
+    ###################################
+
+if __name__ == "__main__":
+    main()

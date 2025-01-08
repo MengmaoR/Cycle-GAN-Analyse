@@ -1,3 +1,7 @@
 checkpoints/*
 datasets/*
 __pycache__/*
+results/*
+output/*
+my_img/*
+demo_img/*
