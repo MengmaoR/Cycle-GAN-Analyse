@@ -9,7 +9,7 @@ from PIL import Image
 import torch
 
 from models import Generator
-from models import Discriminator
+from models import PatchGAN16, PatchGAN70, PatchGAN142
 from utils import ReplayBuffer
 from utils import LambdaLR
 from utils import Logger
@@ -30,6 +30,7 @@ def main():
     parser.add_argument('--n_cpu', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--use_pretrained', action='store_true', help='use pretrained model')
     parser.add_argument('--style', type=str, default='monet', help='style name')
+    parser.add_argument('--patch', type=int, default=70, help='patch size')
     opt = parser.parse_args()
     print(opt)
 
@@ -40,8 +41,18 @@ def main():
     # Networks
     netG_A2B = Generator(opt.input_nc, opt.output_nc).to(device)
     netG_B2A = Generator(opt.output_nc, opt.input_nc).to(device)
-    netD_A = Discriminator(opt.input_nc).to(device)
-    netD_B = Discriminator(opt.output_nc).to(device)
+    
+    if opt.patch == 16:
+        netD_A = PatchGAN16(opt.input_nc).to(device)
+        netD_B = PatchGAN16(opt.output_nc).to(device)
+    elif opt.patch == 70:
+        netD_A = PatchGAN70(opt.input_nc).to(device)
+        netD_B = PatchGAN70(opt.output_nc).to(device)
+    elif opt.patch == 142:
+        netD_A = PatchGAN142(opt.input_nc).to(device)
+        netD_B = PatchGAN142(opt.output_nc).to(device)
+    else:
+        raise ValueError(f"Invalid patch size: {opt.patch}")
 
     # 如果不使用预训练，则对网络进行随机初始化
     if not opt.use_pretrained:
@@ -53,15 +64,31 @@ def main():
         print(f"Using pretrained model, loading from {model_path}")
         # 使用预训练模型进行二次训练
         try:
-            ga = torch.load(f'{model_path}/netG_A.pth', map_location=device)
-            da = torch.load(f'{model_path}/netD_A.pth', map_location=device)
-            gb = torch.load(f'{model_path}/netG_B.pth', map_location=device)
-            db = torch.load(f'{model_path}/netD_B.pth', map_location=device)
+            if os.path.exists(f'{model_path}/netG_A.pth'):
+                ga = torch.load(f'{model_path}/netG_A.pth', map_location=device)
+                netG_A2B.load_state_dict(ga)
+            else:
+                netG_A2B.apply(weights_init_normal)
+            
+            if os.path.exists(f'{model_path}/netD_A.pth'):
+                da = torch.load(f'{model_path}/netD_A.pth', map_location=device)
+                netD_A.load_state_dict(da)
+            else:
+                netD_A.apply(weights_init_normal)
+            
+            if os.path.exists(f'{model_path}/netG_B.pth'):
+                gb = torch.load(f'{model_path}/netG_B.pth', map_location=device)
+                netG_B2A.load_state_dict(gb)
+            else:
+                netG_B2A.apply(weights_init_normal)
 
-            netG_A2B.load_state_dict(ga)
-            netG_B2A.load_state_dict(gb)
-            netD_A.load_state_dict(da)
-            netD_B.load_state_dict(db)
+            if os.path.exists(f'{model_path}/netD_B.pth'):
+                db = torch.load(f'{model_path}/netD_B.pth', map_location=device)
+                netD_B.load_state_dict(db)
+            else:
+                netD_B.apply(weights_init_normal)
+
+
             print(f"Pretrained Model loaded successfully")
         except Exception as e:
             print(f"Error loading model: {e}")
@@ -86,7 +113,6 @@ def main():
     input_B = Tensor(opt.batchSize, opt.output_nc, opt.size, opt.size)
     target_real = Variable(Tensor(opt.batchSize).fill_(1.0), requires_grad=False)
     target_fake = Variable(Tensor(opt.batchSize).fill_(0.0), requires_grad=False)
-
     fake_A_buffer = ReplayBuffer()
     fake_B_buffer = ReplayBuffer()
 
@@ -141,19 +167,17 @@ def main():
             pred_fake = netD_B(fake_B)
             loss_GAN_A2B = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
 
-            if i % 100 < 4:
-                fake_B_img = (fake_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
-                fake_B_img = Image.fromarray(fake_B_img.astype('uint8'))
-                fake_B_img.save(f'output/fake_B_epoch{epoch}_batch{i}.png')
+            # fake_B_img = (fake_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            # fake_B_img = Image.fromarray(fake_B_img.astype('uint8'))
+            # fake_B_img.save(f'output/fake_B_epoch{epoch}_batch{i}.png')
 
             fake_A = netG_B2A(real_B)
             pred_fake = netD_A(fake_A)
             loss_GAN_B2A = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
 
-            if i % 100 < 4:
-                fake_A_img = (fake_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
-                fake_A_img = Image.fromarray(fake_A_img.astype('uint8'))
-                fake_A_img.save(f'output/fake_A_epoch{epoch}_batch{i}.png')
+            # fake_A_img = (fake_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            # fake_A_img = Image.fromarray(fake_A_img.astype('uint8'))
+            # fake_A_img.save(f'output/fake_A_epoch{epoch}_batch{i}.png')
 
             # Cycle loss
             recovered_A = netG_B2A(fake_B)
@@ -218,10 +242,19 @@ def main():
         lr_scheduler_D_B.step()
 
         # Save models checkpoints
-        torch.save(netG_A2B.state_dict(), 'output/netG_A2B.pth')
-        torch.save(netG_B2A.state_dict(), 'output/netG_B2A.pth')
-        torch.save(netD_A.state_dict(), 'output/netD_A.pth')
-        torch.save(netD_B.state_dict(), 'output/netD_B.pth')
+        if os.path.exists(f'output/netG_A2B_e{epoch-1}.pth'):
+            os.remove(f'output/netG_A2B_e{epoch-1}.pth')
+        if os.path.exists(f'output/netG_B2A_e{epoch-1}.pth'):
+            os.remove(f'output/netG_B2A_e{epoch-1}.pth')
+        if os.path.exists(f'output/netD_A_e{epoch-1}_p{opt.patch}.pth'):
+            os.remove(f'output/netD_A_e{epoch-1}_p{opt.patch}.pth')
+        if os.path.exists(f'output/netD_B_e{epoch-1}_p{opt.patch}.pth'):
+            os.remove(f'output/netD_B_e{epoch-1}_p{opt.patch}.pth')
+            
+        torch.save(netG_A2B.state_dict(), f'output/netG_A2B_e{epoch}.pth')
+        torch.save(netG_B2A.state_dict(), f'output/netG_B2A_e{epoch}.pth')
+        torch.save(netD_A.state_dict(), 'output/netD_A_e{epoch}_p{opt.patch}.pth')
+        torch.save(netD_B.state_dict(), 'output/netD_B_e{epoch}_p{opt.patch}.pth')
     ###################################
 
 if __name__ == "__main__":

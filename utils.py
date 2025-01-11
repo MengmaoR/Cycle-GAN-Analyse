@@ -2,6 +2,7 @@ import random
 import time
 import datetime
 import sys
+import os
 
 from torch.autograd import Variable
 import torch
@@ -73,6 +74,17 @@ class Logger():
             sys.stdout.write('\n')
         else:
             self.batch += 1
+
+        # Write logs to file
+        # Clear the log file content
+        with open('training_log.txt', 'a') as log_file:
+            log_file.write('Epoch %03d/%03d [%04d/%04d] -- ' % (self.epoch, self.n_epochs, self.batch, self.batches_epoch))
+            for i, loss_name in enumerate(losses.keys()):
+                if (i+1) == len(losses.keys()):
+                    log_file.write('%s: %.4f -- ' % (loss_name, self.losses[loss_name]/self.batch))
+                else:
+                    log_file.write('%s: %.4f | ' % (loss_name, self.losses[loss_name]/self.batch))
+            log_file.write('ETA: %s\n' % (datetime.timedelta(seconds=batches_left*self.mean_period/batches_done)))
 
         
 
