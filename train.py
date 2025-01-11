@@ -138,19 +138,18 @@ def main():
 
             # GAN loss
             fake_B = netG_A2B(real_A)
-            loss_GAN_A2B = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
             pred_fake = netD_B(fake_B)
+            loss_GAN_A2B = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
 
             if i % 100 < 4:
                 fake_B_img = (fake_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
                 fake_B_img = Image.fromarray(fake_B_img.astype('uint8'))
                 fake_B_img.save(f'output/fake_B_epoch{epoch}_batch{i}.png')
-            
 
             fake_A = netG_B2A(real_B)
-            loss_GAN_B2A = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
             pred_fake = netD_A(fake_A)
-            
+            loss_GAN_B2A = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
+
             if i % 100 < 4:
                 fake_A_img = (fake_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
                 fake_A_img = Image.fromarray(fake_A_img.astype('uint8'))
