@@ -18,7 +18,7 @@ from datasets import ImageDataset
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--epoch', type=int, default=100, help='starting epoch')
+    parser.add_argument('--epoch', type=int, default=0, help='starting epoch')
     parser.add_argument('--n_epochs', type=int, default=200, help='number of epochs of training')
     parser.add_argument('--decay_epoch', type=int, default=100, help='epoch to start linearly decaying the learning rate to 0')
     parser.add_argument('--batchSize', type=int, default=1, help='size of the batches')
@@ -34,7 +34,7 @@ def main():
     opt = parser.parse_args()
     print(opt)
 
-    model_path = f"checkpoints/monet2photo_pretrained"
+    model_path = f"checkpoints/attention"
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     ###### Definition of variables ######
@@ -64,8 +64,8 @@ def main():
         print(f"Using pretrained model, loading from {model_path}")
         # 使用预训练模型进行二次训练
         try:
-            if os.path.exists(f'{model_path}/netG_A.pth'):
-                ga = torch.load(f'{model_path}/netG_A.pth', map_location=device)
+            if os.path.exists(f'{model_path}/netG_B.pth'):
+                ga = torch.load(f'{model_path}/netG_B.pth', map_location=device)
                 netG_A2B.load_state_dict(ga)
             else:
                 netG_A2B.apply(weights_init_normal)
@@ -76,8 +76,8 @@ def main():
             else:
                 netD_A.apply(weights_init_normal)
             
-            if os.path.exists(f'{model_path}/netG_B.pth'):
-                gb = torch.load(f'{model_path}/netG_B.pth', map_location=device)
+            if os.path.exists(f'{model_path}/netG_A.pth'):
+                gb = torch.load(f'{model_path}/netG_A.pth', map_location=device)
                 netG_B2A.load_state_dict(gb)
             else:
                 netG_B2A.apply(weights_init_normal)
@@ -111,8 +111,8 @@ def main():
     Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
     input_A = Tensor(opt.batchSize, opt.input_nc, opt.size, opt.size)
     input_B = Tensor(opt.batchSize, opt.output_nc, opt.size, opt.size)
-    target_real = Variable(Tensor(opt.batchSize).fill_(1.0), requires_grad=False)
-    target_fake = Variable(Tensor(opt.batchSize).fill_(0.0), requires_grad=False)
+    target_real = Variable(Tensor(opt.batchSize, 1, 30, 30).fill_(1.0), requires_grad=False)
+    target_fake = Variable(Tensor(opt.batchSize, 1, 30, 30).fill_(0.0), requires_grad=False)
     fake_A_buffer = ReplayBuffer()
     fake_B_buffer = ReplayBuffer()
 
@@ -137,53 +137,59 @@ def main():
             real_A = Variable(input_A.copy_(batch['A']))
             real_B = Variable(input_B.copy_(batch['B']))
 
-            # real_A_img = (real_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
-            # real_A_img = Image.fromarray(real_A_img.astype('uint8'))
-            # real_A_img.save(f'output/real_A_epoch{epoch}_batch{i}.png')
-            # real_B_img = (real_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
-            # real_B_img = Image.fromarray(real_B_img.astype('uint8'))
-            # real_B_img.save(f'output/real_B_epoch{epoch}_batch{i}.png')
+            real_A_img = (real_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            real_A_img = Image.fromarray(real_A_img.astype('uint8'))
+            real_A_img.save(f'output/real_A_epoch{epoch}_batch{i}.png')
+            real_B_img = (real_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            real_B_img = Image.fromarray(real_B_img.astype('uint8'))
+            real_B_img.save(f'output/real_B_epoch{epoch}_batch{i}.png')
 
             ###### Generators A2B and B2A ######
             optimizer_G.zero_grad()
 
             # Identity loss
             # G_A2B(B) should equal B if real B is fed
-            same_B = netG_A2B(real_B)
+            same_B, _ = netG_A2B(real_B)
             loss_identity_B = criterion_identity(same_B, real_B)*5.0
             # same_B_img = (same_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
             # same_B_img = Image.fromarray(same_B_img.astype('uint8'))
             # same_B_img.save(f'output/same_B_epoch{epoch}_batch{i}.png')
             # G_B2A(A) should equal A if real A is fed
 
-            same_A = netG_B2A(real_A)
+            same_A, _ = netG_B2A(real_A)
             loss_identity_A = criterion_identity(same_A, real_A)*5.0
             # same_A_img = (same_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
             # same_A_img = Image.fromarray(same_A_img.astype('uint8'))
             # same_A_img.save(f'output/same_A_epoch{epoch}_batch{i}.png')
 
             # GAN loss
-            fake_B = netG_A2B(real_A)
+            fake_B, _ = netG_A2B(real_A)
             pred_fake = netD_B(fake_B)
-            loss_GAN_A2B = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
+            print(f"expand: {target_real.shape}")
+            loss_GAN_A2B = criterion_GAN(pred_fake, target_real)
+            print(f"loss_GAN_A2B: {loss_GAN_A2B}")
 
-            # fake_B_img = (fake_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
-            # fake_B_img = Image.fromarray(fake_B_img.astype('uint8'))
-            # fake_B_img.save(f'output/fake_B_epoch{epoch}_batch{i}.png')
+            target_real_this = torch.ones_like(pred_fake)
+            loss_GAN_A2B_this = criterion_GAN(pred_fake, target_real_this)
+            print(f"loss_GAN_A2B_this: {loss_GAN_A2B_this}")
 
-            fake_A = netG_B2A(real_B)
+            fake_B_img = (fake_B[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            fake_B_img = Image.fromarray(fake_B_img.astype('uint8'))
+            fake_B_img.save(f'output/fake_B_epoch{epoch}_batch{i}.png')
+
+            fake_A, _ = netG_B2A(real_B)
             pred_fake = netD_A(fake_A)
             loss_GAN_B2A = criterion_GAN(pred_fake, target_real.expand_as(pred_fake))
 
-            # fake_A_img = (fake_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
-            # fake_A_img = Image.fromarray(fake_A_img.astype('uint8'))
-            # fake_A_img.save(f'output/fake_A_epoch{epoch}_batch{i}.png')
+            fake_A_img = (fake_A[0].cpu().detach().numpy().transpose(1, 2, 0) + 1) / 2.0 * 255.0
+            fake_A_img = Image.fromarray(fake_A_img.astype('uint8'))
+            fake_A_img.save(f'output/fake_A_epoch{epoch}_batch{i}.png')
 
             # Cycle loss
-            recovered_A = netG_B2A(fake_B)
+            recovered_A, _ = netG_B2A(fake_B)
             loss_cycle_ABA = criterion_cycle(recovered_A, real_A)*10.0
 
-            recovered_B = netG_A2B(fake_A)
+            recovered_B, _ = netG_A2B(fake_A)
             loss_cycle_BAB = criterion_cycle(recovered_B, real_B)*10.0
 
             # Total loss
@@ -198,12 +204,12 @@ def main():
 
             # Real loss
             pred_real = netD_A(real_A)
-            loss_D_real = criterion_GAN(pred_real, target_real.expand_as(pred_real))
+            loss_D_real = criterion_GAN(pred_real, target_real)
 
             # Fake loss
             fake_A = fake_A_buffer.push_and_pop(fake_A)
             pred_fake = netD_A(fake_A.detach())
-            loss_D_fake = criterion_GAN(pred_fake, target_fake.expand_as(pred_fake))
+            loss_D_fake = criterion_GAN(pred_fake, target_fake)
 
             # Total loss
             loss_D_A = (loss_D_real + loss_D_fake)*0.5
@@ -217,12 +223,12 @@ def main():
 
             # Real loss
             pred_real = netD_B(real_B)
-            loss_D_real = criterion_GAN(pred_real, target_real.expand_as(pred_fake))
+            loss_D_real = criterion_GAN(pred_real, target_real)
             
             # Fake loss
             fake_B = fake_B_buffer.push_and_pop(fake_B)
             pred_fake = netD_B(fake_B.detach())
-            loss_D_fake = criterion_GAN(pred_fake, target_fake.expand_as(pred_fake))
+            loss_D_fake = criterion_GAN(pred_fake, target_fake)
 
             # Total loss
             loss_D_B = (loss_D_real + loss_D_fake)*0.5
@@ -250,7 +256,7 @@ def main():
             os.remove(f'output/netD_A_e{epoch-1}_p{opt.patch}.pth')
         if os.path.exists(f'output/netD_B_e{epoch-1}_p{opt.patch}.pth'):
             os.remove(f'output/netD_B_e{epoch-1}_p{opt.patch}.pth')
-            
+
         torch.save(netG_A2B.state_dict(), f'output/netG_A2B_e{epoch}.pth')
         torch.save(netG_B2A.state_dict(), f'output/netG_B2A_e{epoch}.pth')
         torch.save(netD_A.state_dict(), 'output/netD_A_e{epoch}_p{opt.patch}.pth')

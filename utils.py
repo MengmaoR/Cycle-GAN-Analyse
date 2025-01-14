@@ -2,7 +2,6 @@ import random
 import time
 import datetime
 import sys
-import os
 
 from torch.autograd import Variable
 import torch
