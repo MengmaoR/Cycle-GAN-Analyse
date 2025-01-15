@@ -1,7 +1,7 @@
  # Cycle-GAN-Analyse
+![demo](./imgs/demo.png)
 
 ## 项目简介
-![demo](./imgs/demo.png)
 本项目基于 Cycle GAN，主要对其在图像风格迁移能力方面进行分析和改进。
 Cycle GAN 是一种无监督学习模型，能够在不需要成对训练数据的情况下实现图像到图像的转换。它的核心思想是通过两个生成器和两个判别器，将两个不同领域的图像进行转换。其中，生成器 G 将一个领域的图像转换为另一个领域的图像，生成器 F 则将另一个领域的图像转换回第一个领域。判别器 D 用于判断生成的图像是否真实，判别器 E 用于判断转换后的图像是否与原图像一致。通过这种方式，Cycle GAN 可以实现图像的风格迁移。
 Cycle GAN 原项目地址：https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix?tab=readme-ov-file
