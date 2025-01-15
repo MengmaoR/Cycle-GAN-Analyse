@@ -14,14 +14,9 @@ cd Cycle-GAN
 ```
 
 ### 环境依赖配置
-对于 pip 用户，可以使用以下命令安装所需的依赖：
+请使用以下命令安装所需的依赖：
 ```bash
 pip install -r requirements.txt
-```
-
-对于 conda 用户，可以使用以下命令安装所需的依赖：
-```bash
-conda env create -f environment.yml
 ```
 
 ### 数据集下载
