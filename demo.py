@@ -42,7 +42,7 @@ def demo(model_name, dataloader, device, Tensor):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, default="style_monet", help="Name of the model to use")
+    parser.add_argument("--model_name", type=str, default="typical", help="Name of the model to use")
     parser.add_argument("--dataroot", type=str, default="./demo_img", help="Path to the images to be converted")
     opt = parser.parse_args()
     

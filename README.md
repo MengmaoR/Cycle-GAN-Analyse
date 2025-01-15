@@ -53,6 +53,8 @@ python -m visdom
 ```
 然后在浏览器中打开 `http://localhost:8097/` 即可查看训练过程。
 
+训练结束后，完整的训练日志会被保存在 `training_log.txt` 文件中。
+
 ### 模型测试
 你可以通过如下命令测试 Cycle GAN 模型效果：
 ```bash
@@ -72,6 +74,36 @@ python demo.py
 你的图片会经过统一的尺寸统一，曝光统一等预处理后，存放在 `./demo_img` 目录下，后续直接使用 `demo.py` 即可进行测试。
 
 所有测试结果会保存在 `./results/model_name/` 目录下。
+
+## 结果分析
+
+### loss 曲线分析
+要绘制不同模型的 loss 曲线对比图，你需要首先将不同模型训练得到的 `training_log.txt` 文件改名并存放在 `./log/` 目录下，随后进入`plot.py` 文件，修改 `log_files` 和 `log_names` 两个列表，分别存放不同模型的 log 文件名和模型名称。需修改的代码如下所示：
+```python
+    log_files = ["log/typical_log.txt", "log/attention_log.txt"]  # 添加你的日志文件路径
+    log_names = ["typical", "attention"]  # 日志文件对应的名称
+```
+
+最后，执行如下命令即可绘制 loss 曲线对比图：
+```bash
+python plot.py
+```
+
+绘制结果会保存在 `./log/` 目录下。
+
+### 注意力机制效果分析
+要对注意力机制进行分析，你首先需要一个训练好的注意力机制模型，并将其保存在 `./checkpoints/` 目录下。然后，你需要进入 `attention.py` 文件，修改 `model_path` 和 `img_path` 两个变量，分别为你的模型存放路径和测试用图片存放路径。需修改的代码如下所示：
+```python
+    model_path = 'checkpoints/attention/netG_B2A.pth'
+    img_path = 'demo_img/0012.png'
+```
+
+最后，你可以通过如下命令测试注意力机制效果：
+```bash
+python attention.py
+```
+
+可视化测试结果会被保存在 `attention_visualization.png` 文件中。
 
 ## 致谢
 - 感谢 [Cycle GAN](https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix?tab=readme-ov-file) 项目对图像风格迁移领域的重要贡献。
