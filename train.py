@@ -29,12 +29,13 @@ def main():
     parser.add_argument('--output_nc', type=int, default=3, help='number of channels of output data')
     parser.add_argument('--n_cpu', type=int, default=8, help='number of cpu threads to use during batch generation')
     parser.add_argument('--use_pretrained', action='store_true', help='use pretrained model')
+    parser.add_argument('--pretrained_name', type=str, default='monet2photo', help='pretrained model name')
     parser.add_argument('--style', type=str, default='monet', help='style name')
     parser.add_argument('--patch', type=int, default=70, help='patch size')
     opt = parser.parse_args()
     print(opt)
 
-    model_path = f"checkpoints/attention"
+    model_path = f"checkpoints/{opt.pretrained_path}"
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     ###### Definition of variables ######
@@ -246,6 +247,9 @@ def main():
         lr_scheduler_G.step()
         lr_scheduler_D_A.step()
         lr_scheduler_D_B.step()
+
+        if not os.path.exists('output'):
+            os.makedirs('output')
 
         # Save models checkpoints
         if os.path.exists(f'output/netG_A2B_e{epoch-1}.pth'):

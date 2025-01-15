@@ -23,7 +23,6 @@ def demo(model_name, dataloader, device, Tensor):
     except Exception as e:
         print(f"Error loading model: {e}")
 
-    # Set model's test mode
     netG.eval()
 
     save_path = f"results/{model_name}"
@@ -32,47 +31,38 @@ def demo(model_name, dataloader, device, Tensor):
         os.makedirs('results/' + model_name)
 
     for i, batch in enumerate(dataloader):
-        # Generate output
         real_A = Variable(batch.type(Tensor))
         fake = 0.5*(netG(real_A)[0].data + 1.0)
 
-        # Save fake image files
         save_image(fake, f'{save_path}/%04d_fake.png' % (i+1))
 
         sys.stdout.write('\rGenerated images %04d of %04d' % (i+1, len(dataloader)))
 
     sys.stdout.write('\n')
-    ###################################
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model_name", type=str, default="style_monet", help="Name of the model to use")
+    parser.add_argument("--dataroot", type=str, default="./demo_img", help="Path to the images to be converted")
+    opt = parser.parse_args()
+    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     torch.device(device)
 
-    # Inputs & targets memory allocation
     Tensor = torch.cuda.FloatTensor if torch.cuda.is_available() else torch.Tensor
 
-    # Dataset loader
     transforms_ = [ transforms.ToTensor(),
                     transforms.Normalize((0.5,0.5,0.5), (0.5,0.5,0.5)) ]
     
-    img_path = './demo_img'
+    img_path = opt.dataroot
     dataloader = DataLoader(
         SimpleImageDataset(img_path, transforms_=transforms_),
         batch_size=1,
         shuffle=False,
         num_workers=0
     )
-    ###################################
 
-    ###### Testing######
-
-    # Create output dirs if they don't exist
-    # models = ["style_monet", "style_cezanne", "style_ukiyoe", "style_vangogh"]
-
-    # for model_name in models:
-    #     demo(model_name, dataloader, device, Tensor)
-
-    demo("patch_16", dataloader, device, Tensor)
+    demo(opt.model_name, dataloader, device, Tensor)
 
 if __name__ == "__main__":
     main()
